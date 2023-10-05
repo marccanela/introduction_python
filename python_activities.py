@@ -1,7 +1,5 @@
-# -*- coding: utf-8 -*-
 """
 Created on Mon Nov 21 08:41:22 2022
-
 @author: mcanela
 """
 
