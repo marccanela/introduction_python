@@ -305,6 +305,8 @@ On the other hand, if you want maximum flexibility (e.g. mix data types), lists 
 # Turn this list into an array: [4, 7, 6, 1]
 import numpy as np
 np.array([4, 7, 6, 1])
+# The size of a vector (i.e, the array) can be ontained with .size
+np.array([4, 7, 6, 1]).size
 
 # Make an array containing the integers from 1 to 15.
 np.arange(1, 16)
@@ -585,6 +587,14 @@ array([[9, 7, 4, 2, 3],
 And if an array has some extra dimensions you don't care about (like a 32x1x1 array,
 and you just want a 32 array), you can use the squeeze() method to squeeze out those extra dimensions!
 
+You can construct a diagonal matrix using NumPy's diag function:
+>>> np.diag([4, 5, 6])
+If you pass a matrix to the diag function, it will happily extract the diagonal into a 1D numpy array.
+>>> np.diag(data)
+
+Numpy's eye function returns the identity matrix of the desired size:
+>>> np.eye(3)
+
 Finally, you can find out the shape of a matrix by getting its shape attribute.  And to get the total number of elements, check its size attribute.
 
 >>> data.shape
@@ -682,6 +692,14 @@ scores[-1, -1]
 
 # The 2nd through 5th score, in the 6th column:
 scores[1:5, 5]
+
+# Note that the result is actually a one-dimensional NumPy array: there is no such thing as a vertical or horizontal 
+# one-dimensional array. If you need to actually represent a row vector as a one-row matrix (i.e. a 2D NumPy array),
+# or a column vector as a one-column matrix, then you need to use a slice instead of an integer when accessing the row or column,
+# for example:
+
+scores[:, 2]  # 3rd column vector (as a 1D array)
+scores[:, 2:3]  # columns 3 to 4 (excluded): this returns column 3 as a one-column matrix
 
 # All the scores greater than 20:
 scores[scores > 20]
