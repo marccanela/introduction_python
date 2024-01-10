@@ -15,13 +15,14 @@ from math import pi
 from scipy.ndimage import label
 from scipy import ndimage as ndi
 from skimage.segmentation import watershed
+from sklearn.mixture import GaussianMixture
 
 import skimage
 from skimage.feature import peak_local_max
 
 
 # Load the .nd2 file
-directory = '//folder/becell/Lab Projects/ERCstG_HighMemory/Data/Marc/1) SOC/2023-10 - TRAP2/Microscope TRAP2/Females/female_2/female_2_cg_001.nd2'
+directory = '/Users/mcanela/Downloads/female_4_cg_002.nd2'
 image = nd2.imread(directory)
 
 def split_layers(image):
@@ -76,57 +77,78 @@ def background_threshold(blurred_normalized):
         # plt.legend()
         # plt.show()
         
-        # Create a threshold mask
-        # threshold = elbow_value
-        # threshold_mask = layer_roi < threshold
-        # layer_threshold = np.where(blurred_normalized < threshold, 255, blurred_normalized)
-        # plt.imshow(layer_threshold, cmap='grey');
-        
         return elbow_value
-    
+
+def normalize_array(arr):
+    min_val = np.min(arr)
+    max_val = np.max(arr)
+    normalized_arr = (arr - min_val) / (max_val - min_val) * 255
+    return normalized_arr.astype(int)
 
 def watershed(binary_image):
-        
-    img = binary_image.astype(np.uint8)
-    img = (img == 0).astype(np.uint8) * 255
     
-    dist_transform = cv2.distanceTransform(img, cv2.DIST_L2, 3)
-    plt.imshow(dist_transform);
-    
-    local_max_location_coords = peak_local_max(dist_transform, min_distance=1)
-    local_max_location = np.zeros_like(dist_transform, dtype=bool)
-    local_max_location[local_max_location_coords] = True
-    
-    local_max_boolean_coords = peak_local_max(dist_transform, min_distance=1)
-    local_max_boolean = np.zeros_like(dist_transform, dtype=bool)
-    local_max_boolean[local_max_boolean_coords] = True
-    
-    markers, _ = ndi.label(local_max_boolean)
-    
-    segmented = skimage.segmentation.watershed(255-dist_transform, markers, mask=img)
+    # Label connected clusters
+    labeled_array, num_clusters = label(~binary_image)  # Invert the array because we want to label False values
 
-    fig, axes = plt.subplots(ncols=3, figsize=(9, 3), sharex=True, sharey=True)
-    ax = axes.ravel()
+    # Find properties of each labeled region
+    regions = regionprops(labeled_array)
     
-    ax[0].imshow(img, cmap=plt.cm.gray)
-    ax[0].set_title('Input image')
-    ax[1].imshow(-dist_transform, cmap=plt.cm.gray)
-    ax[1].set_title('Distance transform')
-    ax[2].imshow(segmented, cmap=plt.cm.nipy_spectral)
-    ax[2].set_title('Separated objects')
+    # Parameters for filtering
+    threshold_circularity = 0.75  # Circularity threshold
+        
+    # Filter elliptical/circular clusters based on circularity
+    circular_clusters = []
+    artifact_clusters = []
     
-    for a in ax:
-        a.set_axis_off()
+    for region in regions:
+        # Calculate circularity: 4 * pi * area / (perimeter^2)
+        circularity = 4 * pi * region.area / (region.perimeter ** 2)
+        
+        # Check circularity and minimum area
+        if circularity >= threshold_circularity:
+            circular_clusters.append(region)
+        elif circularity < threshold_circularity:
+            artifact_clusters.append(region)
     
-    fig.tight_layout()
-    plt.show()
+    # # Create a new image displaying the artifacts
+    # artifacts_binary = np.zeros(binary_image.shape, dtype=bool)
+    # for region in artifact_clusters:
+    #     coords = region.coords  # Coordinates of the current region
+    #     artifacts_binary[coords[:, 0], coords[:, 1]] = True
+    # # plt.imshow(artifacts_binary);
+    
+    # Create a collection of images of artifacts
+    my_artifacts = []
+    for region in artifact_clusters:
+        artifacts_binary = np.zeros(binary_image.shape, dtype=bool)
+        coords = region.coords  # Coordinates of the current region
+        artifacts_binary[coords[:, 0], coords[:, 1]] = True
+        # Find rows and columns that are all False
+        rows_to_keep = np.any(artifacts_binary, axis=1)
+        cols_to_keep = np.any(artifacts_binary, axis=0)
+        # Crop the array based on the identified rows and columns
+        cropped_arr = artifacts_binary[rows_to_keep][:, cols_to_keep]
+        my_artifacts.append(cropped_arr)
+    # plt.imshow(my_artifacts[0]);
+
+    # Analyze each artifact individually
+    for artifact in my_artifacts:
+        distance = ndi.distance_transform_edt(artifact)
+        distance_normalized = normalize_array(distance)
+        # plt.imshow(distance_normalized);
+        
+
+
     
     
-    
-    
-    
-    
-    
+    # histogram_values, bin_edges = np.histogram(distance_normalized, bins=64, range=(1, 255))
+    # plt.figure(figsize=(10, 6))
+    # plt.bar(bin_edges[:-1], histogram_values, width=bin_edges[1] - bin_edges[0], color='blue', edgecolor='black')
+    # plt.title("Histogram with 64 Bins")
+    # plt.xlabel("Value")
+    # plt.ylabel("Frequency")
+    # plt.grid(axis='y', alpha=0.75)
+    # plt.show()
     
     
     return
@@ -156,87 +178,80 @@ def compiler(image):
     # plt.imshow(blurred, cmap='grey');
     
     # Normalize the cfos layer
-    def normalize_array(arr):
-        min_val = np.min(arr)
-        max_val = np.max(arr)
-        normalized_arr = (arr - min_val) / (max_val - min_val) * 255
-        return normalized_arr
     blurred_normalized = normalize_array(blurred)
     # plt.imshow(blurred_normalized, cmap='grey');
   
     # Apply a threshold for the background
     elbow_value = background_threshold(blurred_normalized)
     binary_image = blurred_normalized < elbow_value
-    # plt.imshow(binary_image, cmap='grey');
+    # plt.imshow(binary_image, cmap='viridis');
     
-    # Label connected clusters
-    labeled_array, num_clusters = label(~binary_image)  # Invert the array because we want to label False values
-
-
-
-
-
-
-
-
-
-
-
-    # Find properties of each labeled region
-    regions = regionprops(labeled_array)
+    # Apply function watershed
     
-    # Parameters for filtering
-    threshold_circularity = 0.5  # Circularity threshold
     
-    # Calculate the minimum area in pixels using the conversion factor
-    min_area_threshold_micron = 10  # Minimum area in µm^2
-    min_area_threshold_pixels = min_area_threshold_micron * (1.55 ** 2)
     
-    # Filter elliptical/circular clusters based on circularity and minimum area
-    filtered_clusters = []
     
-    for region in regions:
-        # Calculate circularity: 4 * pi * area / (perimeter^2)
-        circularity = 4 * pi * region.area / (region.perimeter ** 2)
+    
+    
+    
+    
+    
+    # # Label connected clusters
+    # labeled_array, num_clusters = label(~binary_image)  # Invert the array because we want to label False values
+
+    # # Find properties of each labeled region
+    # regions = regionprops(labeled_array)
+    
+    # # Parameters for filtering
+    # threshold_circularity = 0.5  # Circularity threshold
+    
+    # # Calculate the minimum area in pixels using the conversion factor
+    # min_area_threshold_micron = 10  # Minimum area in µm^2
+    # min_area_threshold_pixels = min_area_threshold_micron * (1.55 ** 2)
+    
+    # # Filter elliptical/circular clusters based on circularity and minimum area
+    # filtered_clusters = []
+    
+    # for region in regions:
+    #     # Calculate circularity: 4 * pi * area / (perimeter^2)
+    #     circularity = 4 * pi * region.area / (region.perimeter ** 2)
         
-        # Check circularity and minimum area
-        if circularity >= threshold_circularity and region.area >= min_area_threshold_pixels:
-            # Add the cluster to the list of filtered clusters
-            filtered_clusters.append(region)
+    #     # Check circularity and minimum area
+    #     if circularity >= threshold_circularity and region.area >= min_area_threshold_pixels:
+    #         # Add the cluster to the list of filtered clusters
+    #         filtered_clusters.append(region)
     
-    # Extract sizes of filtered clusters
-    sizes = [region.area for region in filtered_clusters]
+    # # Extract sizes of filtered clusters
+    # sizes = [region.area for region in filtered_clusters]
     
-    plt.hist(sizes, bins=20, color='blue', edgecolor='black', alpha=0.7)
-    plt.title('Histogram of Cluster Sizes')
-    plt.xlabel('Cluster Size (pixels)')
-    plt.ylabel('Frequency')
-    plt.grid(axis='y', linestyle='--', alpha=0.7)
-    plt.show()
-    
-    
+    # plt.hist(sizes, bins=20, color='blue', edgecolor='black', alpha=0.7)
+    # plt.title('Histogram of Cluster Sizes')
+    # plt.xlabel('Cluster Size (pixels)')
+    # plt.ylabel('Frequency')
+    # plt.grid(axis='y', linestyle='--', alpha=0.7)
+    # plt.show()
     
     
     
     
     
-    # Count the size of each cluster
-    sizes = [np.sum(labeled_array == i) for i in range(1, num_clusters + 1)]
-    
-
-
     
     
-    
-    
-    
+    # # Count the size of each cluster
+    # sizes = [np.sum(labeled_array == i) for i in range(1, num_clusters + 1)]
     
 
 
+    
+    
+    
+    
+    
+    
 
 
-        
-        
+
+
         
         
         
@@ -248,6 +263,11 @@ def compiler(image):
         
         
         
+        
+        
+        
+        
+             
         
         
         
